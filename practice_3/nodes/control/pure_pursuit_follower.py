@@ -47,8 +47,10 @@ class PurePursuitFollower:
         # Extract velocity values at waypoints
         velocities = np.array([w.twist.twist.linear.x for w in msg.waypoints])
 
+        distance_to_velocity_interpolator = interp1d(distances, velocities, kind='linear', bounds_error=False, fill_value=0.0)
+
         self.path_linestring = path_linestring
-        self.distance_to_velocity_interpolator = interp1d(distances, velocities, kind='linear', bounds_error=False, fill_value=0.0)
+        self.distance_to_velocity_interpolator = distance_to_velocity_interpolator
 
 
     def current_pose_callback(self, msg):
