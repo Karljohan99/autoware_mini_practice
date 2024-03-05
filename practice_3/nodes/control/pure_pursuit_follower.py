@@ -30,15 +30,16 @@ class PurePursuitFollower:
         rospy.Subscriber('/localization/current_pose', PoseStamped, self.current_pose_callback, queue_size=1)
 
     def path_callback(self, msg):
+        waypoints_list = [(w.pose.pose.position.x, w.pose.pose.position.y) for w in msg.waypoints]
+
         # convert waypoints to shapely linestring
-        path_linestring = LineString([(w.pose.pose.position.x, w.pose.pose.position.y) for w in msg.waypoints])
+        path_linestring = LineString(waypoints_list)
         # prepare path - creates spatial tree, making the spatial queries more efficient
         prepare(path_linestring)
-        self.path_linestring = path_linestring
 
         # Create a distance to velocity interpolator for the path
         # collect waypoint x and y coordinates
-        waypoints_xy = np.array([(w.pose.pose.position.x, w.pose.pose.position.y) for w in msg.waypoints])
+        waypoints_xy = np.array(waypoints_list)
         # Calculate distances between points
         distances = np.cumsum(np.sqrt(np.sum(np.diff(waypoints_xy, axis=0)**2, axis=1)))
         # add 0 distance in the beginning
@@ -46,7 +47,8 @@ class PurePursuitFollower:
         # Extract velocity values at waypoints
         velocities = np.array([w.twist.twist.linear.x for w in msg.waypoints])
 
-        self.distance_to_velocity_interpolator = interp1d(distances, velocities, kind='linear')
+        self.path_linestring = path_linestring
+        self.distance_to_velocity_interpolator = interp1d(distances, velocities, kind='linear', bounds_error=False, fill_value=0.0)
 
 
     def current_pose_callback(self, msg):
