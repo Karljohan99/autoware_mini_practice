@@ -47,7 +47,7 @@ class Lanelet2GlobalPlanner:
         self.graph = lanelet2.routing.RoutingGraph(self.lanelet2_map, traffic_rules)
 
         #Publishers
-        self.waypoints_pub = rospy.Publisher('/global_path', Lane, latch=True)
+        self.waypoints_pub = rospy.Publisher('global_path', Lane, latch=True)
 
 
         #Subscribers
@@ -97,7 +97,7 @@ class Lanelet2GlobalPlanner:
             self.goal_point = None
             rospy.loginfo("Goal distance limit reached. Path is cleared.")
 
-
+    
     def lanelet_sequence_to_waypoints(self, lanelet_path):
         waypoints = []
         is_last_lanelet = False
@@ -161,13 +161,11 @@ class Lanelet2GlobalPlanner:
         lane.header.frame_id = self.output_frame
         lane.header.stamp = rospy.Time.now()
         lane.waypoints = waypoints
-        print(lane.waypoints)
         self.waypoints_pub.publish(lane)
 
 
     def run(self):
         rospy.spin()
-
 
 
 
