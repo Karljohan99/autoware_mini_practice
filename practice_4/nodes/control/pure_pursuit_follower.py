@@ -29,16 +29,22 @@ class PurePursuitFollower:
         rospy.Subscriber('path', Lane, self.path_callback, queue_size=1)
         rospy.Subscriber('/localization/current_pose', PoseStamped, self.current_pose_callback, queue_size=1)
 
-    def path_callback(self, msg):
-        waypoints_list = [(w.pose.pose.position.x, w.pose.pose.position.y) for w in msg.waypoints]
 
-        if len(waypoints_list) == 0:
+    def path_callback(self, msg):
+        if len(msg.waypoints) == 0:
             vehicle_cmd = VehicleCmd()
             vehicle_cmd.header.stamp = msg.header.stamp
             vehicle_cmd.header.frame_id = "base_link"
             vehicle_cmd.ctrl_cmd.steering_angle = 0
             vehicle_cmd.ctrl_cmd.linear_velocity = 0
             self.vehicle_cmd_pub.publish(vehicle_cmd)
+
+            self.path_linestring = None
+            self.distance_to_velocity_interpolator = None
+            return
+
+
+        waypoints_list = [(w.pose.pose.position.x, w.pose.pose.position.y) for w in msg.waypoints]
 
         # convert waypoints to shapely linestring
         path_linestring = LineString(waypoints_list)

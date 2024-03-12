@@ -94,6 +94,7 @@ class Lanelet2GlobalPlanner:
         
         if dist < self.distance_to_goal_limit:
             publish_wayspoints([], self.waypoints_pub, self.output_frame)
+            self.goal_point = None
             rospy.loginfo("Goal distance limit reached. Path is cleared.")
 
     def run(self):
@@ -123,11 +124,12 @@ def lanelet_sequence_to_waypoints(lanelet_path, speed_limit, goal_point):
             for j, point in enumerate(lanelet.centerline):
                 waypoint = Waypoint()
 
-                if j == 0 or LineString(last_lanelet_centerline.coords[:j]).length < proj_dist:
+                if j == 0 or LineString(last_lanelet_centerline.coords[:j+1]).length < proj_dist:
                     waypoint.pose.pose.position.x = point.x
                     waypoint.pose.pose.position.y = point.y
                     waypoint.pose.pose.position.z = point.z
                     waypoint.twist.twist.linear.x = speed
+                    waypoints.append(waypoint)
                 else:
                     first_trimmed_point = Point(point.x, point.y)
                     previous_point = Point(lanelet.centerline[j-1].x, lanelet.centerline[j-1].y)
@@ -141,6 +143,7 @@ def lanelet_sequence_to_waypoints(lanelet_path, speed_limit, goal_point):
                     waypoint.pose.pose.position.y = last_waypoint.y
                     waypoint.pose.pose.position.z = last_waypoint_z
                     waypoint.twist.twist.linear.x = speed
+                    waypoints.append(waypoint) 
 
 
         else:
