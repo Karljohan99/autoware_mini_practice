@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
-
+import math
 import rospy
+
+from shapely.geometry import Point, LineString
 
 from geometry_msgs.msg import PoseStamped
 from autoware_msgs.msg import Waypoint
@@ -77,7 +79,7 @@ class Lanelet2GlobalPlanner:
         # this returns LaneletSequence to a point where lane change would be necessary to continue
         path_no_lane_change = path.getRemainingLane(start_lanelet)
 
-        waypoints = lanelet_sequence_to_waypoints(path_no_lane_change, self.speed_limit)
+        waypoints = lanelet_sequence_to_waypoints(path_no_lane_change, self.speed_limit, self.goal_point)
 
         publish_wayspoints(waypoints, self.waypoints_pub, self.output_frame)
         
@@ -85,27 +87,71 @@ class Lanelet2GlobalPlanner:
     def current_location_callback(self, msg):
         self.current_location = BasicPoint2d(msg.pose.position.x, msg.pose.position.y)
 
+        if self.goal_point is None:
+            return
+        
+        dist = math.sqrt((self.current_location.x - self.goal_point.x) ** 2 + (self.current_location.y - self.goal_point.y) ** 2)
+        
+        if dist < self.distance_to_goal_limit:
+            publish_wayspoints([], self.waypoints_pub, self.output_frame)
+            rospy.loginfo("Goal distance limit reached. Path is cleared.")
 
     def run(self):
         rospy.spin()
 
 
-def lanelet_sequence_to_waypoints(lanelet_path, speed_limit):
+def lanelet_sequence_to_waypoints(lanelet_path, speed_limit, goal_point):
     waypoints = []
-    for lanelet in lanelet_path:
+    is_last_lanelet = False
+
+    for i, lanelet in enumerate(lanelet_path):
+        if i == len(lanelet_path) - 1:
+            is_last_lanelet = True
+
         if 'speed_ref' in lanelet.attributes:
             speed = float(lanelet.attributes['speed_ref']) / 3.6
         else:
             speed = float(speed_limit)
         
-        for point in lanelet.centerline:
-            # create Waypoint and get the coordinats from lanelet.centerline points
-            waypoint = Waypoint()
-            waypoint.pose.pose.position.x = point.x
-            waypoint.pose.pose.position.y = point.y
-            waypoint.pose.pose.position.z = point.z
-            waypoint.twist.twist.linear.x = speed
-            waypoints.append(waypoint)
+        if is_last_lanelet:
+            last_lanelet_centerline = LineString([[point.x, point.y] for point in lanelet.centerline])
+
+            proj_dist = last_lanelet_centerline.project(Point(goal_point.x, goal_point.y))
+
+            last_waypoint = last_lanelet_centerline.interpolate(proj_dist)
+
+            for j, point in enumerate(lanelet.centerline):
+                waypoint = Waypoint()
+
+                if j == 0 or LineString(last_lanelet_centerline.coords[:j]).length < proj_dist:
+                    waypoint.pose.pose.position.x = point.x
+                    waypoint.pose.pose.position.y = point.y
+                    waypoint.pose.pose.position.z = point.z
+                    waypoint.twist.twist.linear.x = speed
+                else:
+                    first_trimmed_point = Point(point.x, point.y)
+                    previous_point = Point(lanelet.centerline[j-1].x, lanelet.centerline[j-1].y)
+
+                    old_dist = previous_point.distance(first_trimmed_point)
+                    new_dist = previous_point.distance(last_waypoint)
+
+                    last_waypoint_z = lanelet.centerline[j-1].z + (lanelet.centerline[j-1].z-point.z)*new_dist/old_dist
+
+                    waypoint.pose.pose.position.x = last_waypoint.x
+                    waypoint.pose.pose.position.y = last_waypoint.y
+                    waypoint.pose.pose.position.z = last_waypoint_z
+                    waypoint.twist.twist.linear.x = speed
+
+
+        else:
+            for point in lanelet.centerline:
+                # create Waypoint and get the coordinats from lanelet.centerline points
+                waypoint = Waypoint()
+                waypoint.pose.pose.position.x = point.x
+                waypoint.pose.pose.position.y = point.y
+                waypoint.pose.pose.position.z = point.z
+                waypoint.twist.twist.linear.x = speed
+                waypoints.append(waypoint) 
         
     return waypoints
 

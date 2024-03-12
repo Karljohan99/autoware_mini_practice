@@ -32,6 +32,14 @@ class PurePursuitFollower:
     def path_callback(self, msg):
         waypoints_list = [(w.pose.pose.position.x, w.pose.pose.position.y) for w in msg.waypoints]
 
+        if len(waypoints_list) == 0:
+            vehicle_cmd = VehicleCmd()
+            vehicle_cmd.header.stamp = msg.header.stamp
+            vehicle_cmd.header.frame_id = "base_link"
+            vehicle_cmd.ctrl_cmd.steering_angle = 0
+            vehicle_cmd.ctrl_cmd.linear_velocity = 0
+            self.vehicle_cmd_pub.publish(vehicle_cmd)
+
         # convert waypoints to shapely linestring
         path_linestring = LineString(waypoints_list)
         # prepare path - creates spatial tree, making the spatial queries more efficient
@@ -74,7 +82,6 @@ class PurePursuitFollower:
         steering_angle = np.arctan(2*self.wheel_base*np.sin(lookahead_heading - heading)/lookahead_distance)
         
         velocity = self.distance_to_velocity_interpolator(d_ego_from_path_start)
-
 
         vehicle_cmd = VehicleCmd()
         vehicle_cmd.header.stamp = msg.header.stamp
