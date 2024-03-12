@@ -92,6 +92,7 @@ class Lanelet2GlobalPlanner:
         
         dist = math.sqrt((self.current_location.x - self.goal_point.x) ** 2 + (self.current_location.y - self.goal_point.y) ** 2)
         
+        # check if goal reached
         if dist < self.distance_to_goal_limit:
             self.publish_waypoints([])
             self.goal_point = None
@@ -111,6 +112,7 @@ class Lanelet2GlobalPlanner:
             else:
                 speed = float(self.speed_limit)
             
+            # if last lanelet then trim the centerline at nearest point before the goal point and add the goal point as the last point
             if is_last_lanelet:
                 last_lanelet_centerline = LineString([[point.x, point.y] for point in lanelet.centerline])
 
@@ -118,15 +120,19 @@ class Lanelet2GlobalPlanner:
 
                 last_waypoint = last_lanelet_centerline.interpolate(proj_dist)
 
+                # search for the trimming location
                 for j, point in enumerate(lanelet.centerline):
                     waypoint = Waypoint()
 
+                    # no trimming yet
                     if j == 0 or LineString(last_lanelet_centerline.coords[:j+1]).length < proj_dist:
                         waypoint.pose.pose.position.x = point.x
                         waypoint.pose.pose.position.y = point.y
                         waypoint.pose.pose.position.z = point.z
                         waypoint.twist.twist.linear.x = speed
                         waypoints.append(waypoint)
+
+                    # trim the centerline 
                     else:
                         first_trimmed_point = Point(point.x, point.y)
                         previous_point = Point(lanelet.centerline[j-1].x, lanelet.centerline[j-1].y)
@@ -134,13 +140,15 @@ class Lanelet2GlobalPlanner:
                         old_dist = previous_point.distance(first_trimmed_point)
                         new_dist = previous_point.distance(last_waypoint)
 
+                        # calculate z-coordinate for the goal point assuming linear change in elevation 
                         last_waypoint_z = lanelet.centerline[j-1].z + (lanelet.centerline[j-1].z-point.z)*new_dist/old_dist
 
                         waypoint.pose.pose.position.x = last_waypoint.x
                         waypoint.pose.pose.position.y = last_waypoint.y
                         waypoint.pose.pose.position.z = last_waypoint_z
                         waypoint.twist.twist.linear.x = speed
-                        waypoints.append(waypoint) 
+                        waypoints.append(waypoint)
+                        break
 
 
             else:
@@ -166,8 +174,6 @@ class Lanelet2GlobalPlanner:
 
     def run(self):
         rospy.spin()
-
-
 
 
 
