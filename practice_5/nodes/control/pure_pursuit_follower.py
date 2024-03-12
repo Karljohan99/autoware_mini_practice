@@ -32,13 +32,6 @@ class PurePursuitFollower:
 
     def path_callback(self, msg):
         if len(msg.waypoints) == 0:
-            vehicle_cmd = VehicleCmd()
-            vehicle_cmd.header.stamp = msg.header.stamp
-            vehicle_cmd.header.frame_id = "base_link"
-            vehicle_cmd.ctrl_cmd.steering_angle = 0
-            vehicle_cmd.ctrl_cmd.linear_velocity = 0
-            self.vehicle_cmd_pub.publish(vehicle_cmd)
-
             self.path_linestring = None
             self.distance_to_velocity_interpolator = None
             return
@@ -68,17 +61,27 @@ class PurePursuitFollower:
 
 
     def current_pose_callback(self, msg):
-        if self.path_linestring is None or self.distance_to_velocity_interpolator is None:
+        path_linestring = self.path_linestring
+        distance_to_velocity_interpolator = self.distance_to_velocity_interpolator
+
+        if path_linestring is None or distance_to_velocity_interpolator is None:
+            vehicle_cmd = VehicleCmd()
+            vehicle_cmd.header.stamp = msg.header.stamp
+            vehicle_cmd.header.frame_id = "base_link"
+            vehicle_cmd.ctrl_cmd.steering_angle = 0
+            vehicle_cmd.ctrl_cmd.linear_velocity = 0
+            self.vehicle_cmd_pub.publish(vehicle_cmd)
             return
         
+        
         current_pose = Point([msg.pose.position.x, msg.pose.position.y])
-        d_ego_from_path_start = self.path_linestring.project(current_pose)
+        d_ego_from_path_start = path_linestring.project(current_pose)
         
         # using euler_from_quaternion to get the heading angle
         _, _, heading = euler_from_quaternion([msg.pose.orientation.x, msg.pose.orientation.y, msg.pose.orientation.z, msg.pose.orientation.w])
 
         #lookahead point calculation
-        lookahead_point = self.path_linestring.interpolate(d_ego_from_path_start + self.lookahead_distance)
+        lookahead_point = path_linestring.interpolate(d_ego_from_path_start + self.lookahead_distance)
 
         # lookahead point heading calculation
         lookahead_heading = np.arctan2(lookahead_point.y - current_pose.y, lookahead_point.x - current_pose.x)
@@ -87,7 +90,7 @@ class PurePursuitFollower:
 
         steering_angle = np.arctan(2*self.wheel_base*np.sin(lookahead_heading - heading)/lookahead_distance)
         
-        velocity = self.distance_to_velocity_interpolator(d_ego_from_path_start)
+        velocity = distance_to_velocity_interpolator(d_ego_from_path_start)
 
         vehicle_cmd = VehicleCmd()
         vehicle_cmd.header.stamp = msg.header.stamp

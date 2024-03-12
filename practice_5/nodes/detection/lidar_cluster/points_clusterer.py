@@ -23,20 +23,14 @@ class PointsClusterer():
 
     def points_callback(self, msg):
         data = numpify(msg)
+        
         points = structured_to_unstructured(data[['x', 'y', 'z']], dtype=np.float32)
         labels = self.clusterer.fit_predict(points)
-        print(points.shape)
-
-        print(points[:5])
-        print(labels.shape)
-        print(labels[:5])
-
         
-        points_labeled = np.concatenate(points, labels, dim=1)
+        points_labeled = np.concatenate((points, labels.reshape(labels.shape[0], 1)), axis=1)
 
-        #TODO: Filter out -1
-
-        print(points_labeled.shape)
+        # filter out -1
+        points_labeled = points_labeled[points_labeled[:,3] != -1]
 
         # convert labelled points to PointCloud2 format
         data = unstructured_to_structured(points_labeled, dtype=np.dtype([

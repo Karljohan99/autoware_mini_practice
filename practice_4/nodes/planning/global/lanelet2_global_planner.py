@@ -161,7 +161,6 @@ class Lanelet2GlobalPlanner:
         lane.header.frame_id = self.output_frame
         lane.header.stamp = rospy.Time.now()
         lane.waypoints = waypoints
-        print(lane.waypoints)
         self.waypoints_pub.publish(lane)
 
 
