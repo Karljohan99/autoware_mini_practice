@@ -23,10 +23,12 @@ class PointsClusterer():
 
     def points_callback(self, msg):
         data = numpify(msg)
-        
+
         points = structured_to_unstructured(data[['x', 'y', 'z']], dtype=np.float32)
         labels = self.clusterer.fit_predict(points)
-        
+
+        assert len(points) == len(labels), "The number of points and labels does not match!"
+
         points_labeled = np.concatenate((points, labels.reshape(labels.shape[0], 1)), axis=1)
 
         # filter out -1
@@ -46,7 +48,7 @@ class PointsClusterer():
         cluster_msg.header.frame_id = msg.header.frame_id
         self.points_clustered_pub.publish(cluster_msg)
 
-    
+
     def run(self):
         rospy.spin()
 
