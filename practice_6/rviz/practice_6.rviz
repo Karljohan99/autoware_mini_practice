@@ -791,11 +791,7 @@ Visualization Manager:
           Marker Topic: /detection/final_objects_markers
           Name: Final objects
           Namespaces:
-            bounding_box: true
-            centroid: true
-            convex_hull: true
-            speed: true
-            text: true
+            {}
           Queue Size: 100
           Value: true
       Enabled: true
@@ -803,13 +799,15 @@ Visualization Manager:
     - Class: rviz/Group
       Displays:
         - Class: rviz/MarkerArray
-          Enabled: false
+          Enabled: true
           Marker Topic: /planning/global_path_markers
           Name: Global path
           Namespaces:
-            {}
+            Path: true
+            Velocity label: true
+            Waypoint pose: true
           Queue Size: 100
-          Value: false
+          Value: true
         - Class: rviz/MarkerArray
           Enabled: false
           Marker Topic: /planning/smoothed_path_markers
@@ -823,9 +821,7 @@ Visualization Manager:
           Marker Topic: /planning/local_path_markers
           Name: Local path
           Namespaces:
-            Stopping lateral distance: true
-            Stopping point: true
-            Velocity label: true
+            {}
           Queue Size: 100
           Value: true
         - Class: rviz/Marker
@@ -888,7 +884,7 @@ Visualization Manager:
           Value: false
           Visibility:
             Control:
-              Current pose: true
+              "": true
               Value: true
             Dashboard:
               Accel limit: true
@@ -922,13 +918,13 @@ Visualization Manager:
               Value: true
             Grid: true
             Map:
-              "": true
+              Lanelet2 map: true
               Value: true
             Planning:
               "": true
               Value: true
             Sensing:
-              "": true
+              Points raw center: true
               Value: true
             Simulation:
               Bicycle markers: true
@@ -991,10 +987,10 @@ Visualization Manager:
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.0010000000474974513
-      Scale: 12.522993087768555
+      Scale: 22.069791793823242
       Target Frame: base_link
-      X: 10.167091369628906
-      Y: -9.575997352600098
+      X: 8.576326370239258
+      Y: -14.966819763183594
     Saved:
       - Angle: 0
         Class: rviz/TopDownOrtho
@@ -1080,5 +1076,5 @@ Window Geometry:
   Views:
     collapsed: false
   Width: 1656
-  X: 2761
+  X: 904
   Y: 27
