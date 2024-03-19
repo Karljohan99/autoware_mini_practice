@@ -14,7 +14,7 @@ class PointsClusterer():
 
         cluster_epsilon = rospy.get_param('~cluster_epsilon')
         cluster_min_size = rospy.get_param('~cluster_min_size')
-        self.clusterer = DBSCAN(cluster_epsilon, cluster_min_size)
+        self.clusterer = DBSCAN(eps=cluster_epsilon, min_samples=cluster_min_size)
 
         self.points_clustered_pub = rospy.Publisher('points_clustered', PointCloud2, queue_size=1, tcp_nodelay=True)
 
@@ -27,7 +27,7 @@ class PointsClusterer():
         points = structured_to_unstructured(data[['x', 'y', 'z']], dtype=np.float32)
         labels = self.clusterer.fit_predict(points)
 
-        assert len(points) == len(labels), "The number of points and labels does not match!"
+        assert len(points) == len(labels), "points_clusterer: the number of points and labels does not match"
 
         points_labeled = np.concatenate((points, labels.reshape(labels.shape[0], 1)), axis=1)
 
