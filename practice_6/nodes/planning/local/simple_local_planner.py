@@ -87,43 +87,87 @@ class SimpleLocalPlanner:
         self.current_position = current_position
 
     def detected_objects_callback(self, msg):
-        #print("------ detected objects callback, number of objects: ", len(msg.objects))
+        print("------ detected objects callback, number of objects: ", len(msg.objects))
 
         with self.lock:
             global_path_linestring = self.global_path_linestring
             global_path_distances = self.global_path_distances
             distance_to_velocity_interpolator = self.distance_to_velocity_interpolator
-        
 
-        if any(v is None for v in [global_path_linestring, global_path_distances, distance_to_velocity_interpolator, 
+        # check for None values
+        if any(v is None for v in [global_path_linestring, global_path_distances, distance_to_velocity_interpolator,
                                    self.current_speed, self.current_position]):
-            
+
             self.publish_local_path_wp([], msg.header.stamp, msg.header.frame_id)
             return
-        
+
         d_ego_from_path_start = global_path_linestring.project(self.current_position)
         local_path = self.extract_local_path(global_path_linestring, global_path_distances, d_ego_from_path_start, self.local_path_length)
 
         if local_path is None:
             self.publish_local_path_wp([], msg.header.stamp, msg.header.frame_id)
             return
-        
+
         # create a buffer around the local path
         local_path_buffer = local_path.buffer(self.stopping_lateral_distance, cap_style="flat")
         prepare(local_path_buffer)
 
+        target_velocity = distance_to_velocity_interpolator(d_ego_from_path_start)
+        closest_object_distance = 0
+        local_path_blocked = False
+
+        # fetch transform for target frame
+        try:
+            transform = self.tf_buffer.lookup_transform("base_link", msg.header.frame_id, msg.header.stamp, rospy.Duration(self.transform_timeout))
+        except (TransformException, rospy.ROSTimeMovedBackwardsException) as e:
+            transform = None
+            rospy.logwarn("%s - %s", rospy.get_name(), e)
+            return
+
+
+        object_distances = []
+        object_velocities = []
         for object in msg.objects:
+            # project object velocity to base_link frame to get longitudinal speed
+            # in case there is no transform assume the object is not moving
+            if transform is not None:
+                vector3_stamped = Vector3Stamped(vector=object.velocity.linear)
+                velocity = do_transform_vector3(vector3_stamped, transform).vector
+            else:
+                velocity = Vector3()
+
+            object_velocity = velocity.x
+            object_velocities.append(object_velocity)
+
+            actual_speed = np.sqrt(velocity.x**2+velocity.y**2)
+
+            # find the closest point on the local path
             object_convex_hull = MultiPoint([(point.x, point.y) for point in object.convex_hull.polygon.points]).convex_hull
             if local_path_buffer.intersects(object_convex_hull):
-                polygon = local_path_buffer.intersection(object_convex_hull)
-                print(polygon)
-        
-        target_velocity = distance_to_velocity_interpolator(d_ego_from_path_start)
+                local_path_blocked = True
+
+                intersection_polygon = local_path_buffer.intersection(object_convex_hull)
+
+                for coords in intersection_polygon.exterior.coords[:-1]:
+                    d = local_path.project(Point(coords))
+                    object_distances.append(d)
+
+                print(f"object velocity: {actual_speed} transformed velocity: {object_velocity}")
+
+
+        #print("Object distances", object_distances)
+        if object_distances:
+            closest_object_distance = min(object_distances)
+            distance = closest_object_distance - self.current_pose_to_car_front - self.braking_safety_distance_obstacle
+            target_velocity_local = np.sqrt(max(self.current_speed**2 + 2*self.default_deceleration*distance, 0)) / 3.6
+            #print(target_velocity_local, closest_object_distance)
+            target_velocity = min(target_velocity_local, target_velocity)
+
 
         local_path_waypoints = self.convert_local_path_to_waypoints(local_path, target_velocity)
 
-        self.publish_local_path_wp(local_path_waypoints, msg.header.stamp, msg.header.frame_id)
-    
+        self.publish_local_path_wp(local_path_waypoints, msg.header.stamp, msg.header.frame_id, closest_object_distance, local_path_blocked=local_path_blocked)
+
 
     def extract_local_path(self, global_path_linestring, global_path_distances, d_ego_from_path_start, local_path_length):
 
@@ -182,4 +226,3 @@ if __name__ == '__main__':
     rospy.init_node('simple_local_planner')
     node = SimpleLocalPlanner()
     node.run()
-
