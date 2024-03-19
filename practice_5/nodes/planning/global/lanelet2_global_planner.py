@@ -112,30 +112,29 @@ class Lanelet2GlobalPlanner:
             if i == len(lanelet_path) - 1:
                 is_last_lanelet = True
 
-            if 'speed_ref' in lanelet.attributes and float(self.speed_limit) >= float(lanelet.attributes['speed_ref']):
-                speed = float(lanelet.attributes['speed_ref']) / 3.6
-            else:
-                speed = float(self.speed_limit) / 3.6
+            speed = float(self.speed_limit)
+            if 'speed_ref' in lanelet.attributes:
+                speed = min(speed, float(lanelet.attributes['speed_ref']))
+            speed = speed / 3.6
 
-            # if last lanelet then trim the centerline at nearest point before the goal point and add the goal point as the last point
-            if is_last_lanelet:
-                last_lanelet_centerline = LineString([[point.x, point.y] for point in lanelet.centerline])
 
-                proj_dist = last_lanelet_centerline.project(Point(self.goal_point.x, self.goal_point.y))
+            for j, point in enumerate(lanelet.centerline):
+                waypoint = Waypoint()
+                stop = False
 
-                last_waypoint = last_lanelet_centerline.interpolate(proj_dist)
+                # if last lanelet then trim the centerline at nearest point before the goal point and add the goal point as the last point
+                if is_last_lanelet:
+                    last_lanelet_centerline = LineString([[point.x, point.y] for point in lanelet.centerline])
 
-                # search for the trimming location
-                for j, point in enumerate(lanelet.centerline):
-                    waypoint = Waypoint()
+                    proj_dist = last_lanelet_centerline.project(Point(self.goal_point.x, self.goal_point.y))
+
+                    last_waypoint = last_lanelet_centerline.interpolate(proj_dist)
 
                     # no trimming yet
                     if j == 0 or LineString(last_lanelet_centerline.coords[:j+1]).length < proj_dist:
-                        waypoint.pose.pose.position.x = point.x
-                        waypoint.pose.pose.position.y = point.y
-                        waypoint.pose.pose.position.z = point.z
-                        waypoint.twist.twist.linear.x = speed
-                        waypoints.append(waypoint)
+                        x = point.x
+                        y = point.y
+                        z = point.z
 
                     # trim the centerline
                     else:
@@ -145,28 +144,32 @@ class Lanelet2GlobalPlanner:
                         old_dist = previous_point.distance(first_trimmed_point)
                         new_dist = previous_point.distance(last_waypoint)
 
+                        x = last_waypoint.x
+                        y = last_waypoint.y
+
                         # calculate z-coordinate for the goal point assuming linear change in elevation
-                        last_waypoint_z = lanelet.centerline[j-1].z + (lanelet.centerline[j-1].z-point.z)*new_dist/old_dist
+                        z = lanelet.centerline[j-1].z + (lanelet.centerline[j-1].z-point.z)*new_dist/old_dist
 
-                        waypoint.pose.pose.position.x = last_waypoint.x
-                        waypoint.pose.pose.position.y = last_waypoint.y
-                        waypoint.pose.pose.position.z = last_waypoint_z
-                        waypoint.twist.twist.linear.x = speed
-                        waypoints.append(waypoint)
-                        break
-
-
-            else:
-                for j, point in enumerate(lanelet.centerline):
+                        #stop adding waypoints
+                        stop = True
+                
+                else:
                     if j >= len(lanelet.centerline) - 1:
                         continue
-                    # create Waypoint and get the coordinats from lanelet.centerline points
-                    waypoint = Waypoint()
-                    waypoint.pose.pose.position.x = point.x
-                    waypoint.pose.pose.position.y = point.y
-                    waypoint.pose.pose.position.z = point.z
-                    waypoint.twist.twist.linear.x = speed
-                    waypoints.append(waypoint)
+
+                    x = point.x
+                    y = point.y
+                    z = point.z
+
+
+                waypoint.pose.pose.position.x = x
+                waypoint.pose.pose.position.y = y
+                waypoint.pose.pose.position.z = z
+                waypoint.twist.twist.linear.x = speed
+                waypoints.append(waypoint)
+
+                if stop:
+                    break
 
         return waypoints
 
