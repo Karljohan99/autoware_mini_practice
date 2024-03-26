@@ -33,6 +33,7 @@ class Lanelet2GlobalPlanner:
         # Global variables
         self.goal_point = None
         self.current_location = None
+        self.last_waypoint = None
 
         # Load the map using Lanelet2
         if coordinate_transformer == "utm":
@@ -92,15 +93,16 @@ class Lanelet2GlobalPlanner:
     def current_location_callback(self, msg):
         self.current_location = BasicPoint2d(msg.pose.position.x, msg.pose.position.y)
 
-        if self.goal_point is None:
+        if self.last_waypoint is None:
             return
 
-        dist = math.sqrt((self.current_location.x - self.goal_point.x) ** 2 + (self.current_location.y - self.goal_point.y) ** 2)
+        dist = math.sqrt((self.current_location.x - self.last_waypoint.x) ** 2 + (self.current_location.y - self.last_waypoint.y) ** 2)
 
         # check if goal reached
         if dist < self.distance_to_goal_limit:
             self.publish_waypoints([])
             self.goal_point = None
+            self.last_waypoint = None
             rospy.loginfo("Goal distance limit reached. Path is cleared.")
 
 
@@ -152,7 +154,9 @@ class Lanelet2GlobalPlanner:
 
                         #stop adding waypoints
                         stop = True
-                
+
+                        self.last_waypoint = BasicPoint2d(last_waypoint.x, last_waypoint.y)
+
                 else:
                     if j >= len(lanelet.centerline) - 1:
                         continue
