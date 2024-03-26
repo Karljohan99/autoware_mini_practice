@@ -135,7 +135,7 @@ class CameraTrafficLightDetector:
         if len(stoplines_on_path) > 0:
             transform = self.tf_buffer.lookup_transform(camera_image_msg.header.frame_id, transform_from_frame, camera_image_msg.header.stamp,
                                                         rospy.Duration(self.transform_timeout))
-            print(transform)
+
             rois = self.calculate_roi_coordinates(stoplines_on_path, transform)
 
             print(stoplines_on_path)
@@ -163,7 +163,7 @@ class CameraTrafficLightDetector:
                 us = []
                 vs = []
                 for _, _, x, y, z in bulbs:
-                    # extract map coordinates for every light bulb 
+                    # extract map coordinates for every light bulb
                     point_map = Point(float(x), float(y), float(z))
 
                     # transform point_map to camera frame
@@ -208,7 +208,7 @@ class CameraTrafficLightDetector:
 
 
     def publish_roi_images(self, image, rois, classes, scores, image_time_stamp):
-        
+
         # add rois to image
         if len(rois) > 0:
             for cl, score, (_, _, min_u, max_u, min_v, max_v) in zip(classes, scores, rois):
@@ -226,12 +226,12 @@ class CameraTrafficLightDetector:
                     org=(text_orig_u, text_orig_v),
                     fontFace=cv2.FONT_HERSHEY_SIMPLEX,
                     fontScale=1.5,
-                    color=CLASSIFIER_RESULT_TO_COLOR[cl], 
+                    color=CLASSIFIER_RESULT_TO_COLOR[cl],
                     thickness=2)
 
         image = cv2.resize(image, None, fx=0.5, fy=0.5, interpolation=cv2.INTER_LINEAR)
         img_msg = self.bridge.cv2_to_imgmsg(image, encoding='rgb8')
-        
+
         img_msg.header.stamp = image_time_stamp
         self.tfl_roi_pub.publish(img_msg)
 

@@ -87,8 +87,6 @@ class SimpleLocalPlanner:
         self.current_position = current_position
 
     def detected_objects_callback(self, msg):
-        #print("------ detected objects callback, number of objects: ", len(msg.objects))
-
         with self.lock:
             global_path_linestring = self.global_path_linestring
             global_path_distances = self.global_path_distances
@@ -98,14 +96,14 @@ class SimpleLocalPlanner:
         if any(v is None for v in [global_path_linestring, global_path_distances, distance_to_velocity_interpolator,
                                    self.current_speed, self.current_position]):
 
-            self.publish_local_path_wp([], msg.header.stamp, msg.header.frame_id)
+            self.publish_local_path_wp([], msg.header.stamp, self.output_frame)
             return
 
         d_ego_from_path_start = global_path_linestring.project(self.current_position)
         local_path = self.extract_local_path(global_path_linestring, global_path_distances, d_ego_from_path_start, self.local_path_length)
 
         if local_path is None:
-            self.publish_local_path_wp([], msg.header.stamp, msg.header.frame_id)
+            self.publish_local_path_wp([], msg.header.stamp, self.output_frame)
             return
 
         # create a buffer around the local path
@@ -130,6 +128,7 @@ class SimpleLocalPlanner:
         object_velocities = []
         target_velocities = []
         object_braking_distances = []
+
         for object in msg.objects:
             # project object velocity to base_link frame to get longitudinal speed
             # in case there is no transform assume the object is not moving
@@ -139,7 +138,7 @@ class SimpleLocalPlanner:
             else:
                 velocity = Vector3()
 
-            # find the closest point on the local path
+            # create a convex hull of detected objects and check if it intersects with local path
             object_convex_hull = MultiPoint([(point.x, point.y) for point in object.convex_hull.polygon.points]).convex_hull
             if local_path_buffer.intersects(object_convex_hull):
                 local_path_blocked = True
@@ -149,45 +148,51 @@ class SimpleLocalPlanner:
 
                 #actual_speed = np.sqrt(velocity.x**2+velocity.y**2)
 
+                # find the detected object's closest point and use that to calculate the distance between the object and the ego vehicle
                 intersection_polygon = local_path_buffer.intersection(object_convex_hull)
-
                 object_point_distances = []
                 for coords in intersection_polygon.exterior.coords[:-1]:
                     d = local_path.project(Point(coords))
                     object_point_distances.append(d)
 
                 object_distances.append(min(object_point_distances))
-                object_braking_distances.append(abs(object_velocity)*self.braking_reaction_time)
 
-                #print(f"object velocity: {actual_speed} transformed velocity: {object_velocity}")
+                # safety buffer
+                object_braking_distances.append(self.braking_safety_distance_obstacle+self.current_pose_to_car_front)
 
 
+        # add goal point to the detected objects list
         if global_path_linestring.coords[-1] == local_path.coords[-1]:
             object_distances.append(local_path.length)
             object_velocities.append(0)
-            object_braking_distances.append(0)
+            object_braking_distances.append(self.current_pose_to_car_front) # no braking saftey distance for goal point
 
 
-        #print("Object distances", object_distances)
+        # find the closest object and its velocity
         if object_distances:
-            target_distances = np.array(object_distances) - np.array(object_braking_distances)
+            # add saftey buffer and breaking reaction time
+            target_distances = np.array(object_distances) - np.array(object_braking_distances) - np.abs(object_velocities)*self.braking_reaction_time
 
-            target_velocities = np.array(object_velocities)**2 + 2*self.default_deceleration*target_distances
+            # calculate target velocities
+            target_velocities_squared = np.maximum(0, object_velocities)**2 + 2*self.default_deceleration*target_distances
+            target_velocities = np.sqrt(np.maximum(0, target_velocities_squared))
+
+            # choose the smallest velocity
             min_idx = np.argmin(target_velocities)
 
             closest_object_distance = object_distances[min_idx]
             closest_object_velocity = object_velocities[min_idx]
 
-            distance = closest_object_distance - self.current_pose_to_car_front - self.braking_safety_distance_obstacle
-            target_velocity_local = np.sqrt(max(self.current_speed**2 + 2*self.default_deceleration*distance, 0)) / 3.6
-            #print(target_velocity_local, closest_object_distance)
+            target_velocity_local = target_velocities[min_idx]
+
+            # ensure that the target velocitiy does not exceed the speed limit
             target_velocity = min(target_velocity_local, target_velocity)
 
 
         local_path_waypoints = self.convert_local_path_to_waypoints(local_path, target_velocity)
 
 
-        self.publish_local_path_wp(local_path_waypoints, msg.header.stamp, msg.header.frame_id, closest_object_distance, closest_object_velocity, local_path_blocked=local_path_blocked)
+        self.publish_local_path_wp(local_path_waypoints, msg.header.stamp, self.output_frame, closest_object_distance, closest_object_velocity, local_path_blocked=local_path_blocked)
 
 
     def extract_local_path(self, global_path_linestring, global_path_distances, d_ego_from_path_start, local_path_length):
