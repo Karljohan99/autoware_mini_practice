@@ -33,6 +33,7 @@ class Lanelet2GlobalPlanner:
         # Global variables
         self.goal_point = None
         self.current_location = None
+        self.last_waypoint = None
 
         # Load the map using Lanelet2
         if coordinate_transformer == "utm":
@@ -92,15 +93,16 @@ class Lanelet2GlobalPlanner:
     def current_location_callback(self, msg):
         self.current_location = BasicPoint2d(msg.pose.position.x, msg.pose.position.y)
 
-        if self.goal_point is None:
+        if self.last_waypoint is None:
             return
 
-        dist = math.sqrt((self.current_location.x - self.goal_point.x) ** 2 + (self.current_location.y - self.goal_point.y) ** 2)
+        dist = math.sqrt((self.current_location.x - self.last_waypoint.x) ** 2 + (self.current_location.y - self.last_waypoint.y) ** 2)
 
         # check if goal reached
         if dist < self.distance_to_goal_limit:
             self.publish_waypoints([])
             self.goal_point = None
+            self.last_waypoint = None
             rospy.loginfo("Goal distance limit reached. Path is cleared.")
 
 
@@ -111,6 +113,9 @@ class Lanelet2GlobalPlanner:
         for i, lanelet in enumerate(lanelet_path):
             if i == len(lanelet_path) - 1:
                 is_last_lanelet = True
+                last_lanelet_centerline = LineString([[point.x, point.y] for point in lanelet.centerline])
+                proj_dist = last_lanelet_centerline.project(Point(self.goal_point.x, self.goal_point.y))
+                last_waypoint = last_lanelet_centerline.interpolate(proj_dist)
 
             speed = float(self.speed_limit)
             if 'speed_ref' in lanelet.attributes:
@@ -120,56 +125,33 @@ class Lanelet2GlobalPlanner:
 
             for j, point in enumerate(lanelet.centerline):
                 waypoint = Waypoint()
-                stop = False
+                waypoint.twist.twist.linear.x = speed
 
-                # if last lanelet then trim the centerline at nearest point before the goal point and add the goal point as the last point
-                if is_last_lanelet:
-                    last_lanelet_centerline = LineString([[point.x, point.y] for point in lanelet.centerline])
-
-                    proj_dist = last_lanelet_centerline.project(Point(self.goal_point.x, self.goal_point.y))
-
-                    last_waypoint = last_lanelet_centerline.interpolate(proj_dist)
-
-                    # no trimming yet
-                    if j == 0 or LineString(last_lanelet_centerline.coords[:j+1]).length < proj_dist:
-                        x = point.x
-                        y = point.y
-                        z = point.z
-
-                    # trim the centerline
-                    else:
-                        first_trimmed_point = Point(point.x, point.y)
-                        previous_point = Point(lanelet.centerline[j-1].x, lanelet.centerline[j-1].y)
-
-                        old_dist = previous_point.distance(first_trimmed_point)
-                        new_dist = previous_point.distance(last_waypoint)
-
-                        x = last_waypoint.x
-                        y = last_waypoint.y
-
-                        # calculate z-coordinate for the goal point assuming linear change in elevation
-                        z = lanelet.centerline[j-1].z + (lanelet.centerline[j-1].z-point.z)*new_dist/old_dist
-
-                        #stop adding waypoints
-                        stop = True
-                
-                else:
+                if not is_last_lanelet or is_last_lanelet and (j == 0 or LineString(last_lanelet_centerline.coords[:j+1]).length < proj_dist):
                     if j >= len(lanelet.centerline) - 1:
                         continue
 
-                    x = point.x
-                    y = point.y
-                    z = point.z
+                    waypoint.pose.pose.position.x = point.x
+                    waypoint.pose.pose.position.y = point.y
+                    waypoint.pose.pose.position.z = point.z
 
+                # if last lanelet then trim the centerline at nearest point before the goal point and add the goal point as the last point
+                else:
+                    first_trimmed_point = Point(point.x, point.y)
+                    previous_point = Point(lanelet.centerline[j-1].x, lanelet.centerline[j-1].y)
 
-                waypoint.pose.pose.position.x = x
-                waypoint.pose.pose.position.y = y
-                waypoint.pose.pose.position.z = z
-                waypoint.twist.twist.linear.x = speed
+                    old_dist = previous_point.distance(first_trimmed_point)
+                    new_dist = previous_point.distance(last_waypoint)
+
+                    waypoint.pose.pose.position.x = last_waypoint.x
+                    waypoint.pose.pose.position.y = last_waypoint.y
+
+                    # calculate z-coordinate for the goal point assuming linear change in elevation
+                    waypoint.pose.pose.position.z  = lanelet.centerline[j-1].z + (lanelet.centerline[j-1].z-point.z)*new_dist/old_dist
+
+                    self.last_waypoint = BasicPoint2d(last_waypoint.x, last_waypoint.y)
+
                 waypoints.append(waypoint)
-
-                if stop:
-                    break
 
         return waypoints
 
