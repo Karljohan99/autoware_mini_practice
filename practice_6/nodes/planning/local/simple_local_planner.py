@@ -87,7 +87,7 @@ class SimpleLocalPlanner:
         self.current_position = current_position
 
     def detected_objects_callback(self, msg):
-        print("------ detected objects callback, number of objects: ", len(msg.objects))
+        #print("------ detected objects callback, number of objects: ", len(msg.objects))
 
         with self.lock:
             global_path_linestring = self.global_path_linestring
@@ -114,6 +114,7 @@ class SimpleLocalPlanner:
 
         target_velocity = distance_to_velocity_interpolator(d_ego_from_path_start)
         closest_object_distance = 0
+        closest_object_velocity = 0
         local_path_blocked = False
 
         # fetch transform for target frame
@@ -127,6 +128,8 @@ class SimpleLocalPlanner:
 
         object_distances = []
         object_velocities = []
+        target_velocities = []
+        object_braking_distances = []
         for object in msg.objects:
             # project object velocity to base_link frame to get longitudinal speed
             # in case there is no transform assume the object is not moving
@@ -136,28 +139,45 @@ class SimpleLocalPlanner:
             else:
                 velocity = Vector3()
 
-            object_velocity = velocity.x
-            object_velocities.append(object_velocity)
-
-            actual_speed = np.sqrt(velocity.x**2+velocity.y**2)
-
             # find the closest point on the local path
             object_convex_hull = MultiPoint([(point.x, point.y) for point in object.convex_hull.polygon.points]).convex_hull
             if local_path_buffer.intersects(object_convex_hull):
                 local_path_blocked = True
 
+                object_velocity = velocity.x
+                object_velocities.append(object_velocity)
+
+                #actual_speed = np.sqrt(velocity.x**2+velocity.y**2)
+
                 intersection_polygon = local_path_buffer.intersection(object_convex_hull)
 
+                object_point_distances = []
                 for coords in intersection_polygon.exterior.coords[:-1]:
                     d = local_path.project(Point(coords))
-                    object_distances.append(d)
+                    object_point_distances.append(d)
 
-                print(f"object velocity: {actual_speed} transformed velocity: {object_velocity}")
+                object_distances.append(min(object_point_distances))
+                object_braking_distances.append(abs(object_velocity)*self.braking_reaction_time)
+
+                #print(f"object velocity: {actual_speed} transformed velocity: {object_velocity}")
+
+
+        if global_path_linestring.coords[-1] == local_path.coords[-1]:
+            object_distances.append(local_path.length)
+            object_velocities.append(0)
+            object_braking_distances.append(0)
 
 
         #print("Object distances", object_distances)
         if object_distances:
-            closest_object_distance = min(object_distances)
+            target_distances = np.array(object_distances) - np.array(object_braking_distances)
+
+            target_velocities = np.array(object_velocities)**2 + 2*self.default_deceleration*target_distances
+            min_idx = np.argmin(target_velocities)
+
+            closest_object_distance = object_distances[min_idx]
+            closest_object_velocity = object_velocities[min_idx]
+
             distance = closest_object_distance - self.current_pose_to_car_front - self.braking_safety_distance_obstacle
             target_velocity_local = np.sqrt(max(self.current_speed**2 + 2*self.default_deceleration*distance, 0)) / 3.6
             #print(target_velocity_local, closest_object_distance)
@@ -166,7 +186,8 @@ class SimpleLocalPlanner:
 
         local_path_waypoints = self.convert_local_path_to_waypoints(local_path, target_velocity)
 
-        self.publish_local_path_wp(local_path_waypoints, msg.header.stamp, msg.header.frame_id, closest_object_distance, local_path_blocked=local_path_blocked)
+
+        self.publish_local_path_wp(local_path_waypoints, msg.header.stamp, msg.header.frame_id, closest_object_distance, closest_object_velocity, local_path_blocked=local_path_blocked)
 
 
     def extract_local_path(self, global_path_linestring, global_path_distances, d_ego_from_path_start, local_path_length):
