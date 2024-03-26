@@ -27,7 +27,7 @@ class PointsClusterer():
         points = structured_to_unstructured(data[['x', 'y', 'z']], dtype=np.float32)
         labels = self.clusterer.fit_predict(points)
 
-        assert len(points) == len(labels), "points_clusterer: the number of points and labels does not match"
+        assert len(points) == len(labels), f"{rospy.get_name()}: the number of points and labels does not match"
 
         points_labeled = np.concatenate((points, labels.reshape(labels.shape[0], 1)), axis=1)
 
