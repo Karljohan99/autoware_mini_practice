@@ -29,6 +29,7 @@ class SimpleLocalPlanner:
         self.stopping_lateral_distance = rospy.get_param("stopping_lateral_distance")
         self.current_pose_to_car_front = rospy.get_param("current_pose_to_car_front")
         self.default_deceleration = rospy.get_param("default_deceleration")
+        self.tfl_maximum_deceleration = rospy.get_param("~tfl_maximum_deceleration")
         # Parameters related to lanelet2 map loading
         coordinate_transformer = rospy.get_param("/localization/coordinate_transformer")
         use_custom_origin = rospy.get_param("/localization/use_custom_origin")
@@ -53,11 +54,8 @@ class SimpleLocalPlanner:
             raise RuntimeError('Only "utm" is supported for lanelet2 map loading')
         lanelet2_map = load(lanelet2_map_name, projector)
 
-        # Extract all stop lines and signals from the lanelet2 map
+        # Extract all stop lines from the lanelet2 map
         self.all_stoplines = get_stoplines(lanelet2_map)
-        #self.signals = get_stoplines_trafficlights_bulbs(lanelet2_map)
-        # If stopline_id is not in self.signals then it has no signals (traffic lights)
-        #self.tfl_stoplines = {k: v for k, v in all_stoplines.items() if k in self.signals}
         self.red_stoplines = []
 
         # Publishers
@@ -115,11 +113,12 @@ class SimpleLocalPlanner:
             global_path_linestring = self.global_path_linestring
             global_path_distances = self.global_path_distances
             distance_to_velocity_interpolator = self.distance_to_velocity_interpolator
+            current_speed = self.current_speed
             current_position = self.current_position
 
         # check for None values
         if any(v is None for v in [global_path_linestring, global_path_distances, distance_to_velocity_interpolator,
-                                   self.current_speed, current_position]):
+                                   current_speed, current_position]):
 
             self.publish_local_path_wp([], msg.header.stamp, self.output_frame)
             return
@@ -196,9 +195,16 @@ class SimpleLocalPlanner:
         if len(self.red_stoplines) > 0:
             for sl_id in self.red_stoplines:
                 if self.all_stoplines[sl_id].intersects(local_path):
-                    object_distances.append(local_path.project(self.all_stoplines[sl_id].intersection(local_path)))
-                    object_velocities.append(0)
-                    object_braking_distances.append(self.braking_safety_distance_stopline+self.current_pose_to_car_front)
+                    distance_to_stopline = local_path.project(self.all_stoplines[sl_id].intersection(local_path))
+                    deceleration = current_speed**2 / (2*distance_to_stopline)
+
+                    # ignore red stop line if the breaking would be too sharp
+                    if deceleration > self.tfl_maximum_deceleration:
+                        rospy.logwarn_throttle(3, f"{rospy.get_name()} - ignore red traffic light, deceleration: {deceleration}")
+                    else:
+                        object_distances.append(distance_to_stopline)
+                        object_velocities.append(0)
+                        object_braking_distances.append(self.braking_safety_distance_stopline+self.current_pose_to_car_front)
 
 
         # find the closest object and its velocity

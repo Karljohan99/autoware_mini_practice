@@ -101,6 +101,7 @@ class CameraTrafficLightDetector:
             camera_model.fromCameraInfo(camera_info_msg)
             self.camera_model = camera_model
 
+
     def local_path_callback(self, local_path_msg):
 
         # used in calculate_roi_coordinates to filter out only relevant signals
@@ -117,6 +118,7 @@ class CameraTrafficLightDetector:
         with self.lock:
             self.stoplines_on_path = stoplines_on_path
             self.transform_from_frame = local_path_msg.header.frame_id
+
 
     def camera_image_callback(self, camera_image_msg):
 
@@ -146,7 +148,7 @@ class CameraTrafficLightDetector:
             except (tf2_ros.TransformException, rospy.ROSTimeMovedBackwardsException) as e:
                 rospy.logwarn("%s - %s", rospy.get_name(), e)
                 return
-            
+
             rois = self.calculate_roi_coordinates(stoplines_on_path, transform)
 
             if len(rois) > 0:
@@ -176,7 +178,6 @@ class CameraTrafficLightDetector:
                 return
 
         self.publish_roi_images(image, [], [], [], camera_image_msg.header.stamp)
-
 
 
     def calculate_roi_coordinates(self, stoplines_on_path, transform):
@@ -226,6 +227,7 @@ class CameraTrafficLightDetector:
                 rois.append([int(stoplineId), plId, min_u, max_u, min_v, max_v])
         return rois
 
+
     def create_roi_images(self, image, rois):
         roi_images = []
         for _, _, min_u, max_u, min_v, max_v in rois:
@@ -238,7 +240,6 @@ class CameraTrafficLightDetector:
 
 
     def publish_roi_images(self, image, rois, classes, scores, image_time_stamp):
-
         # add rois to image
         if len(rois) > 0:
             for cl, score, (_, _, min_u, max_u, min_v, max_v) in zip(classes, scores, rois):
@@ -285,6 +286,7 @@ def get_stoplines(lanelet2_map):
                 stoplines[line.id] = LineString([(p.x, p.y) for p in line])
 
     return stoplines
+
 
 def get_stoplines_trafficlights_bulbs(lanelet2_map):
     """
