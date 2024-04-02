@@ -192,7 +192,8 @@ class SimpleLocalPlanner:
         local_path_waypoints = self.convert_local_path_to_waypoints(local_path, target_velocity)
 
 
-        self.publish_local_path_wp(local_path_waypoints, msg.header.stamp, self.output_frame, closest_object_distance, closest_object_velocity, local_path_blocked=local_path_blocked)
+        self.publish_local_path_wp(local_path_waypoints, msg.header.stamp, self.output_frame, closest_object_distance, closest_object_velocity, 
+                                   local_path_blocked=local_path_blocked, stopping_point_distance=closest_object_distance)
 
 
     def extract_local_path(self, global_path_linestring, global_path_distances, d_ego_from_path_start, local_path_length):
