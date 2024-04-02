@@ -49,7 +49,7 @@ class Lanelet2GlobalPlanner:
         self.graph = lanelet2.routing.RoutingGraph(self.lanelet2_map, traffic_rules)
 
         #Publishers
-        self.waypoints_pub = rospy.Publisher('global_path', Lane, latch=True)
+        self.waypoints_pub = rospy.Publisher('global_path', Lane, latch=True, queue_size=1)
 
 
         #Subscribers
@@ -122,7 +122,7 @@ class Lanelet2GlobalPlanner:
                 speed = min(speed, float(lanelet.attributes['speed_ref']))
             speed = speed / 3.6
 
-
+            stop = False
             for j, point in enumerate(lanelet.centerline):
                 waypoint = Waypoint()
                 waypoint.twist.twist.linear.x = speed
@@ -151,7 +151,11 @@ class Lanelet2GlobalPlanner:
 
                     self.last_waypoint = BasicPoint2d(last_waypoint.x, last_waypoint.y)
 
+                    stop = True
+
                 waypoints.append(waypoint)
+                if stop:
+                    break
 
         return waypoints
 

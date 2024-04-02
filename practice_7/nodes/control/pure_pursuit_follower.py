@@ -25,7 +25,7 @@ class PurePursuitFollower:
         self.wheel_base = rospy.get_param("/wheel_base")
 
         # Publishers
-        self.vehicle_cmd_pub = rospy.Publisher('/control/vehicle_cmd', VehicleCmd)
+        self.vehicle_cmd_pub = rospy.Publisher('/control/vehicle_cmd', VehicleCmd, queue_size=1)
 
         # Subscribers
         rospy.Subscriber('path', Lane, self.path_callback, queue_size=1)
