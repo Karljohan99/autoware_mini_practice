@@ -227,7 +227,7 @@ class SimpleLocalPlanner:
             # ensure that the target velocitiy does not exceed the speed limit
             target_velocity = min(target_velocity_local, target_velocity)
 
-            stopping_point_distance = target_distances[min_idx] + self.current_pose_to_car_front
+            stopping_point_distance = object_distances[min_idx] - object_braking_distances[min_idx] + self.current_pose_to_car_front
 
 
         local_path_waypoints = self.convert_local_path_to_waypoints(local_path, target_velocity)
