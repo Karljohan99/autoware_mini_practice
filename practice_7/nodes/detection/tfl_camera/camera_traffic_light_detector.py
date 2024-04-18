@@ -65,6 +65,7 @@ class CameraTrafficLightDetector:
         self.tfl_stoplines = None
         self.camera_model = None
         self.stoplines_on_path = None
+        self.transform_from_frame = None
 
         self.lock = threading.Lock()
         self.bridge = CvBridge()
@@ -121,25 +122,34 @@ class CameraTrafficLightDetector:
 
 
     def camera_image_callback(self, camera_image_msg):
-
-        if self.camera_model is None:
-            rospy.logwarn_throttle(10, "%s - No camera model received, skipping image", rospy.get_name())
-            return
-
-        if self.stoplines_on_path is None:
-            rospy.logwarn_throttle(10, "%s - No path received, skipping image", rospy.get_name())
-            return
-
         with self.lock:
+            camera_model = self.camera_model
             stoplines_on_path = self.stoplines_on_path
             transform_from_frame = self.transform_from_frame
 
+        if camera_model is None:
+            rospy.logwarn_throttle(10, "%s - No camera model received, skipping image", rospy.get_name())
+            return
+
+        if stoplines_on_path is None:
+            rospy.logwarn_throttle(10, "%s - No path received, skipping image", rospy.get_name())
+            return
+
+        if transform_from_frame is None:
+            rospy.logwarn_throttle(10, "%s - No transform frame received, skipping image", rospy.get_name())
+            return
+
+
         image = self.bridge.imgmsg_to_cv2(camera_image_msg,  desired_encoding='rgb8')
         if self.rectify_image:
-            self.camera_model.rectifyImage(image, image)
+            camera_model.rectifyImage(image, image)
 
         traffic_light_results_array = TrafficLightResultArray()
         traffic_light_results_array.header.stamp = camera_image_msg.header.stamp
+
+        rois = []
+        classes = []
+        scores = []
 
         if len(stoplines_on_path) > 0:
             try:
@@ -171,13 +181,9 @@ class CameraTrafficLightDetector:
                     traffic_light_results_array.results.append(tfl_result)
 
 
-                self.tfl_status_pub.publish(traffic_light_results_array)
+        self.tfl_status_pub.publish(traffic_light_results_array)
 
-                self.publish_roi_images(image, rois, classes, scores, camera_image_msg.header.stamp)
-
-                return
-
-        self.publish_roi_images(image, [], [], [], camera_image_msg.header.stamp)
+        self.publish_roi_images(image, rois, classes, scores, camera_image_msg.header.stamp)
 
 
     def calculate_roi_coordinates(self, stoplines_on_path, transform):
