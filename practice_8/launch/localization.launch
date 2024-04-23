@@ -1,0 +1,16 @@
+<?xml version="1.0"?>
+<launch>
+    <arg name="localizer"   default="novatel"  doc="novatel, carla" />
+
+
+    <group ns="localization">
+    
+        <node if="$(eval localizer=='novatel')" pkg="practice_7" type="localizer.py" name="localizer" output="screen" required="true" />
+
+        <node if="$(eval localizer=='carla')" pkg='autoware_mini' type='carla_localizer.py' name='carla_localizer' output='screen' required="true" />
+
+        <rosparam command="load" file="$(find practice_7)/config/localization.yaml" />
+
+    </group>
+
+</launch>
